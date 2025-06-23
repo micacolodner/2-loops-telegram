@@ -28,7 +28,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define SW12 6
 #define ON12 7
 #define PANTALLA2 8
-#define ON3 9
+#define SUMA 9
+#define RESTA 10
+#define CONFIRMACION 11
 
 //dht
 #define DHTPIN 23
@@ -277,53 +279,70 @@ void Task2code( void * pvParameters ){
         antiRebote();
 
         if (ARBOT1 == LOW) {
-          umbral += 1;
-          delaySB();
+          estadoActual = SUMA;
         }
 
-        
         if (ARBOT2 == LOW) {
-          umbral -= 1
-          delaySB();
+          estadoActual = RESTA;
+        }
+        break;
+
+      case SUMA:
+        antiRebote();
+
+        if (ARBOT1 == LOW){
+          umbral += 1;
         }
 
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(0, 10);
-        display.print("Regule el umbral con los botones: ");
-        display.print("UMBRAL ACTUAL: ");
-        display.print(umbral);
-        display.display();
-
-        if (ARBOT1 == LOW && ARBOT2 == LOW){
-          estadoActual = ON3;
-          }
-          break;
-          
-      case ON3:
-        antiRebote();
         if (ARBOT1 == HIGH && ARBOT2 == HIGH){
+          estadoActual = PANTALLA2;
+        }
+        
+        if (ARBOT2 == LOW){
+          estadoActual = CONFIRMACION;
+        }
+
+        display.setTextSize(1);
+        display.setCursor(0, 0);
+        display.print("Ajuste umbral:");
+        display.setCursor(0, 20);
+        display.setTextSize(2);
+        display.print(umbral);
+        break;
+
+      case RESTA:
+        antiRebote();
+
+        if (ARBOT2 == LOW) {
+          umbral -= 1;
+        }
+
+        if (umbral <= 0){ //que no pueda mostrar numeros negativos
+          umbral = 0;
+        }
+
+        if (ARBOT1 == HIGH && ARBOT2 == HIGH){
+          estadoActual = PANTALLA2;
+        }
+
+        if (ARBOT1 == LOW){
+          estadoActual = CONFIRMACION;
+        }
+        
+        display.setTextSize(1);
+        display.setCursor(0, 0);
+        display.print("Ajuste umbral:");
+        display.setCursor(0, 20);
+        display.setTextSize(2);
+        display.print(umbral);
+        break;
+
+      case CONFIRMACION:
+        antiRebote();
+        if (ARBOT1 == HIGH && ARBOT2 == HIGH) {
           estadoActual = PANTALLA1;
-          }
-          break;
+        }
+        break;
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
