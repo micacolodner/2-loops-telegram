@@ -1,4 +1,4 @@
-// Colodner,Bravar,Bocci,Toledo
+// Colodner,Bravar,Bocci y Toledo GRUPO 2
 //8025037753:AAFpbCTQcwS2Zl1ebt8SktN_9j35VvIw4xY: el token de mi bot
 //6235002183: ID del chat
 
@@ -47,7 +47,6 @@ const char* ssid = "MECA-IoT";
 const char* password = "IoT$2025";
 
 #define BOTtoken "8025037753:AAFpbCTQcwS2Zl1ebt8SktN_9j35VvIw4xY";  // your Bot Token (Get from Botfather)
-Token (Get from Botfather);
 #define CHAT_ID "6235002183"; //el ID del chat
 
 //define los 2 loops
@@ -67,7 +66,7 @@ unsigned long intervaloBotones = 200;
 
 //variables delay
 unsigned long TiempoUltimoCambio = 0;
-const long intervalo = 1000;
+const long intervalo = 500;
 
 //variables delay 5 segundos
 unsigned long TimeUltimoCambio = 0;
@@ -94,14 +93,13 @@ void setup() {
   WiFi.begin(ssid, password);
   client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    delaySB();
     Serial.print(".");
   }
   Serial.println("");
   Serial.println("WiFi connected");
 
-  //Send notification
-  bot.sendMessage(CHAT_ID, "HOLAAAA");
+
 
 
   xTaskCreatePinnedToCore(
@@ -111,8 +109,8 @@ void setup() {
   NULL, // van los parámetros, este no tiene
   1, // le da prioridad 1
   &Task1,    
-  0); //fija el núcleo en cero                  
-  delay(500); //cada cuanto se repite
+  0); //fija el núcleo en cero                 
+  delaySB(); //cada cuanto se repite
 
   xTaskCreatePinnedToCore( //hace lo mismo con la Task2code, osea el loop 2
   Task2code,  
@@ -122,7 +120,7 @@ void setup() {
   1,          
   &Task2,      
   1);          
-  delay(500);
+  delaySB();
 }
 
 //funcion delay sin bloqueo
@@ -146,7 +144,7 @@ bool delay5seg () {
 
 void antiRebote () {
   unsigned long tiempoAhora = millis();
-  if(tiempoAhora - tiempoBotones >= intervaloBotones) {
+  if (tiempoAhora - tiempoBotones >= intervaloBotones) {
     ARBOT1 = digitalRead(SW1_PIN);
     ARBOT2 = digitalRead(SW2_PIN);
     tiempoBotones = tiempoAhora;
@@ -188,7 +186,7 @@ void Task1code( void * pvParameters ){
       handleNewMessages(numNewMessages);
       numNewMessages = bot.getUpdates(bot.last_message_received + 1); //esto es por si llegan mensajes nuevos mientras está procesando
     }
-    delay(5000); // revisa cada 5 segundos si hay mensajes nuevos
+    delay5seg(); // revisa cada 5 segundos si hay mensajes nuevos
   }
 }
 
@@ -285,6 +283,13 @@ void Task2code( void * pvParameters ){
         if (ARBOT2 == LOW) {
           estadoActual = RESTA;
         }
+
+        display.setTextSize(1);
+        display.setCursor(0, 0);
+        display.print("Ajuste umbral:");
+        display.setCursor(0, 20);
+        display.setTextSize(2);
+        display.print(umbral);
         break;
 
       case SUMA:
@@ -317,7 +322,7 @@ void Task2code( void * pvParameters ){
           umbral -= 1;
         }
 
-        if (umbral <= 0){ //que no pueda mostrar numeros negativos
+        if (umbral <= 0){ //que no pueda mostrar numeros negativos, preguntarle a chat
           umbral = 0;
         }
 
