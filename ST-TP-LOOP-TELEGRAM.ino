@@ -1,329 +1,383 @@
-// Colodner,Bravar,Bocci y Toledo GRUPO 2
-//8025037753:AAFpbCTQcwS2Zl1ebt8SktN_9j35VvIw4xY: el token de mi bot
+//GRUPO 2 5MB
+//COLODNER, BOCCI, TOLEDO, BRAVAR 
+//token del bot: 8025037753:AAFpbCTQcwS2Zl1ebt8SktN_9j35VvIw4xY
 //6235002183: ID del chat
 
-//librerías
-#include <WiFi.h>
-#include <UniversalTelegramBot.h>
-#include <ArduinoJson.h>
+
+//LIBRERIAS
+//General
+#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <Adafruit_Sensor.h>
 #include <DHT.h>
-#include <DHT_U.h>
+//Telegram
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include <ArduinoJson.h>
 
-//configuación de la pantalla
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define SDA_PIN 21
-#define SCL_PIN 22
-#define OLED_RESET -1
-
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-//defino estados
+//ESTADOS
+int ESTADO = 1;
 #define PANTALLA1 1
-#define SW1 2
-#define ON1 3
-#define SW2 4
-#define ON2 5
-#define SW12 6
-#define ON12 7
-#define PANTALLA2 8
+#define PANTALLA2 2
+#define SW1 3
+#define ON1 4
+#define SW2 5
+#define ON2 6
+#define SW12 7
+#define CONFIRMACION 8
 #define SUMA 9
 #define RESTA 10
-#define CONFIRMACION 11
 
-//dht
+//VARIABLES DE TIMERS
+unsigned long timer;
+unsigned long timer1000;
+int segs;
+int segs5;
+
+//LED
+#define LED 25 //LED: Se prende al superar el umbral
+
+//BOTONES
+#define SW1 34
+int val1;
+#define SW2 35 
+int val2;
+
+//PANTALLA
+#define LONGITUD 128 // longitud
+#define ALTURA 64 // altura
+Adafruit_SSD1306 display(LONGITUD, ALTURA, &Wire, -1);
+
+//SENSOR DE TEMPERATURA
 #define DHTPIN 23
-#define DHTTYPE DHT11 //tipo de sensor
-DHT_Unified dht(DHTPIN, DHTTYPE);
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+float temp;
+float umbral = 24; //limite de temperatura
 
-//pines de la plca
-#define SW1_PIN 35
-#define SW2_PIN 34
-#define LED 25
+//TAREAS (LOOPS 1 Y 2)
+TaskHandle_t Task1;
+TaskHandle_t Task2;
 
-//defino la red y contraseña del wifi
-const char* ssid = "MECA-IoT";
-const char* password = "IoT$2025";
+//Variable de confirmación de checkeo de mensaje del BOT
+int checkeo;
 
-#define BOTtoken "8025037753:AAFpbCTQcwS2Zl1ebt8SktN_9j35VvIw4xY"  // your Bot Token (Get from Botfather)
-#define CHAT_ID "6235002183" //el ID del chat
+//WIFI
+const char* ssid = "MECA-IoT";     //Nombre de red
+const char* password = "IoT$2025"; //Contraseña de red
+
+//Token del bot
+#define BOTtoken "8025037753:AAFpbCTQcwS2Zl1ebt8SktN_9j35VvIw4xY"
+//ID del chat con el bot
+#define CHAT_ID "6235002183"  
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 
 
-//define los 2 loops
-TaskHandle_t Task1;
-TaskHandle_t Task2;
-
-//variables globales
-float umbral = 10.0; //valor del umbral
-int estadoActual = PANTALLA1;
-float temperatura = 0.0;
-
-//delay
-unsigned long contando = 0;
-
-void setup() {
+void setup() 
+{
   Serial.begin(115200);
-  pinMode(LED, OUTPUT);
-  pinMode(SW1_PIN, INPUT);
-  pinMode(SW2_PIN, INPUT);
-  dht.begin();
-  sensor_t sensor;
-
-  Wire.begin(SDA_PIN, SCL_PIN);
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
-  }
-
- // conecta al wifi
+  Serial.println("Programa iniciado");
+  
+  //Conexión al wifi
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    //un dalay tal vez
-    Serial.print(".");
+  client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.print("-"); //Se manda indefinidamente si no se logra establecer la conexión al wifi
   }
-  Serial.println("");
-  Serial.println("WiFi connected");
+  Serial.println("WiFi conectado"); //Se manda al verificar que se logró establecer la conexión al wifi
 
-  client.setInsecure();
+  //El BOT manda un mensaje a telegram para anunciar que se inició
+  bot.sendMessage(CHAT_ID, "BOT iniciado", ""); 
+
+  //Botones
+  pinMode(SW1, INPUT);
+  pinMode(SW2, INPUT);
+  //LED
+  pinMode(LED, OUTPUT);
+
+  dht.begin(); //inicializa en sensor de temperatura
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); //inicializa el display
 
   xTaskCreatePinnedToCore(
-  Task1code, //crea la tarea Task1code, el loop 1
-  "Task1",    
-  10000, //le da 10k de stack
-  NULL, // van los parámetros, este no tiene
-  1, // le da prioridad 1
-  &Task1,    
-  0); //fija el núcleo en cero                 
-  delay(1000); //cada cuanto se repite
+    Task1code,       //Nombre de la funcion
+    "Task1",         //Nombre de la tarea
+    10000,           //Limite de espacio de la tarea
+    NULL,            //Parametro
+    1,               //Prioridad de la tarea
+    &Task1,          //A que tarea se refiere
+    0                //A que nucleo del ESP32 se asigna la tarea
+  );
 
-  xTaskCreatePinnedToCore( //hace lo mismo con la Task2code, osea el loop 2
-  Task2code,  
-  "Task2",    
-  10000,      
-  NULL,        
-  1,          
-  &Task2,      
-  1);
-  delay(1000);          
-}
-
-//función que muestra en el monitor serial cuantos mensajes nuevos recibió
-void handleNewMessages(int numNewMessages) {
-  Serial.print("Handle New Messages: ");
-  Serial.println(numNewMessages);
-  //analiza 1 por 1 los mensajes ingresados
-  for (int i = 0; i < numNewMessages; i++) {
-    String chat_id = String(bot.messages[i].chat_id);
-    if (chat_id != CHAT_ID){
-      bot.sendMessage(chat_id, "User no autorizado", "");
-      continue; //esto es para confirmar que sea el usuario autorizado
-    }
-    // guarda los mensajes que recibe en text y los printea
-    String text = bot.messages[i].text;
-    Serial.println(text);    
-    String from_name = bot.messages[i].from_name; //el from_name lo usa para poder personalizar mensajes con el nombre de la persona
-    if (text == "Temperatura actual") {
-      bot.sendMessage(CHAT_ID, "La temperatura actual es:   "   + String(temperatura), ""); //si el usuario manda umbral actual le va a mandar el umbral actual uwu
-    }
-  } 
+  xTaskCreatePinnedToCore(
+    Task2code,      //Nombre de la funcion
+    "Task2",        //Nombre de la tarea
+    10000,          //Limite de espacio de la tarea
+    NULL,           //Parametro
+    1,              //Prioridad de la tarea
+    &Task2,         //A que tarea se refiere
+    1               //A que nucleo del ESP32 se asigna la tarea
+  );
 }
 
 
-//PRIMER LOOP: TELEGRAM
-void Task1code( void * pvParameters ){
-  Serial.print("Task1 running on core "); //es para mostrar en el monitor serie en que núcleo la tarea está corriendo
-  Serial.println(xPortGetCoreID()); //es una función que muestra si la tarea está corriendo, si está corriendo devuelve 1 y si no devuelve 0
+void Task1code( void * pvParameters ) //PRIMER LOOP || LOOP DE TELEGRAM
+{
+  Serial.println("Task1");
+  for(;;)
+  {
+    //Se actualiza el reloj
+    timer = millis();
 
-  for(;;){//si o si tiene que ir un while o un for para que nunca salga de la tarea
-    //vTaskDelay(5000/portTICK_PERIOD_MS); // revisa cada 5 segundos si hay mensajes nuevos
-    
-    int numNewMessages = bot.getUpdates(bot.last_message_received + 1); //telegram le suma 1 al id de los mensajes nuevos, por eso hay que sumar 1 ada vez que se hace el bucle, porque sino te va a dar siempre el mismo mensaje
-
-    while (numNewMessages) { //esto solo se ejecuta cuando se cumple lo de arria, es decir que llegan mensajes
-      handleNewMessages(numNewMessages);
-      numNewMessages = bot.getUpdates(bot.last_message_received + 1); //esto es por si llegan mensajes nuevos mientras está procesando
-    }   
-  } 
-}
-
-//SEGUNDO LOOP: MAQUINA DE ESTADOS
-void Task2code( void * pvParameters ){
-  Serial.print("Task2 running on core ");
-  Serial.println(xPortGetCoreID());
-  for(;;){ //si o si tiene que ir un while o un for para que nunca salga de la tarea
-    //leer la temperatura
-    if (millis() - contando >= 5000) {
-      sensors_event_t event;
-      dht.temperature().getEvent(&event);
-      temperatura = event.temperature; //saca el dato guardado en event y lo guadra en la variable temperatura
+    //Si temp supera al umbral, y el bot aún no lo anunció (checkeo == 0)
+    if (temp > umbral && checkeo == 0) 
+    { 
+      //Se cambia checkeo a 1, para que el BOT solo mande 1 vez el mensaje
+      checkeo = 1;
+      //El bot manda un mensaje indicando que se supero el umbral, y se manda también la temperatura actual
+      bot.sendMessage(CHAT_ID, "Se superó el umbral, TEMP ACTUAL: " + String(temp), ""); 
     }
 
-    if (temperatura >= umbral) {
-      bot.sendMessage(CHAT_ID, "La temperatura superó al umbral");
-    } 
-
-
-    switch (estadoActual){
-      case PANTALLA1:
-
-        Serial.println("PANTALLA1");
-
-        if (temperatura >= umbral) {
-          digitalWrite(LED, HIGH);
-        }
-        else {
-          digitalWrite(LED, LOW);
-        }
-
-        //muestra la temperatura en la pantalla
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(SSD1306_WHITE);
-        display.setCursor(0, 10); 
-        display.print("Temp: ");
-        display.print(temperatura);
-        display.display();
-
-        if (digitalRead(digitalRead(SW1_PIN) == LOW)){
-          estadoActual = SW1;
-        }
-        break;
-     
-      case SW1:
-    
-
-        Serial.println("SW1");
-
-        if (digitalRead(SW1_PIN) == HIGH) {
-          contando = millis();
-          estadoActual = ON1;
-        }
-        break;
-
-      case ON1:
-        Serial.println("ON1");
-
-        if ((millis() - contando >= 5000) && digitalRead(SW2_PIN) == HIGH) { //si pasan 5 segundos y el boton 2 no esta apretado
-          contando = 0;
-          estadoActual = PANTALLA1;
-        }
-        else if (digitalRead(SW2_PIN) == LOW) {
-          estadoActual = SW2;
-        }
-        break;
-        
-      case SW2:
-        Serial.println("SW2");
-        if (digitalRead(SW2_PIN) == HIGH){
-          contando = millis();
-          estadoActual = ON2;
-        }
-        break;
-
-      case ON2:
-        Serial.println("ON2");
-        if ((millis() - contando >= 5000) && digitalRead(SW1_PIN) == HIGH) {
-          contando = 0;
-          estadoActual = PANTALLA1;
-          }
-        else if (digitalRead(SW1_PIN) == LOW){
-          estadoActual = SW12;
-          }
-          break;
-          
-      case SW12:
-        Serial.println("SW12");
-        if (digitalRead(SW1_PIN) == HIGH) {
-          estadoActual = ON12;
-          }
-          break;
-
-      case ON12:
-        Serial.println("ON12");
-        if (digitalRead(SW1_PIN) == HIGH) {
-          estadoActual = PANTALLA2;
-          }
-          break;
-          
-      case PANTALLA2:
-        Serial.println("PANTALLA2");
-
-        if (digitalRead(SW1_PIN) == LOW) {
-          estadoActual = SUMA;
-        }
-
-        if (digitalRead(SW2_PIN) == LOW) {
-          estadoActual = RESTA;
-        }
-        display.clearDisplay(); 
-        display.setTextSize(1);
-        display.setCursor(0, 0);
-        display.print("Ajuste el umbral:");
-        display.setCursor(0, 20);
-        display.setTextSize(2);
-        display.print(umbral);
-        display.display();
-        break;
-
-      case SUMA:
-        Serial.println("SUMA");
-        if (digitalRead(SW1_PIN) == HIGH){
-          umbral += 1;
-        }
-
-        if (digitalRead(SW1_PIN) == HIGH && digitalRead(SW2_PIN) == HIGH){
-          estadoActual = PANTALLA2;
-        }
-        
-        if (digitalRead(SW2_PIN) == LOW){
-          estadoActual = CONFIRMACION;
-        }
-
-        display.setTextSize(1);
-        display.setCursor(0, 0);
-        display.print("Ajuste umbral:");
-        display.setCursor(0, 20);
-        display.setTextSize(2);
-        display.print(umbral);
-        break;
-
-      case RESTA:
-        Serial.println("RESTA");
-        if (digitalRead(SW2_PIN) == HIGH) { 
-          umbral -= 1;
-        }
-
-        if (digitalRead(SW1_PIN) == HIGH && digitalRead(SW2_PIN) == HIGH){
-          estadoActual = PANTALLA2;
-        }
-
-        if (digitalRead(SW1_PIN) == LOW){
-          estadoActual = CONFIRMACION;
-        }
-        
-        display.setTextSize(1);
-        display.setCursor(0, 0);
-        display.print("Ajuste umbral:");
-        display.setCursor(0, 20);
-        display.setTextSize(2);
-        display.print(umbral);
-        break;
-
-      case CONFIRMACION:
-        Serial.println("CONFIRMACION");
-        if (digitalRead(SW1_PIN) == HIGH && digitalRead(SW2_PIN) == HIGH) {
-          estadoActual = PANTALLA1;
-        }
-        break;
+    //Cuando temp es más baja que umbral, se hace checkeo = 0, para que cuando temp vuelva a superar a umbral, el BOT vuelva a anunciarlo
+    if (temp < umbral)
+    {
+      checkeo = 0;
     }
+                                                       
+    if (timer >= timer1000) //Esto ocurre una vez cada segundo
+    { 
+      int no_leidos = bot.getUpdates(bot.last_message_received + 1); //Se revisa si hay algún mensaje nuevo / no procesado
+      
+      if (no_leidos > 0) //Si hay algun mensaje no procesado
+      {
+        String recibido = bot.messages[0].text; //El nuevo mensaje se iguala a recibido
+
+        if (recibido == "TEMP")
+        {
+          bot.sendMessage(CHAT_ID, "TEMP ACTUAL: " + String(temp), ""); //Si se recibe "TEMP" el bot envía temp
+        }
+      }
+
+      timer1000 = timer + 1000;
+    }
+
   }
 }
 
-void loop(){}
+
+void Task2code( void * pvParameters ) //SEGUNDO LOOP || LOOP DE LA MAQUINA DE ESTADOS
+{
+  Serial.println("Task2");
+  for(;;) 
+  {
+    //Se actualiza el reloj
+    timer = millis();
+
+    if (timer >= timer1000)
+    {
+      timer1000 = timer + 1000;
+      segs = segs + 1;
+    }
+
+    //Se lee la temperatura (en celcious)
+    temp = dht.readTemperature();
+
+    //Se leen los botones
+    val1 = digitalRead(SW1);
+    val2 = digitalRead(SW2);
+
+    switch (ESTADO) //INICIO DE MÁQUINA DE ESTADOS
+    {
+      case PANTALLA1: //DISPLAY DE TEMPERATURA, UMBRAL
+      Serial.println("pantalla 1");
+      display.clearDisplay(); //Se reinicia el display
+      display.setTextSize(2); //Establece el tamaño de texto
+      display.setTextColor(WHITE);
+      
+      display.setCursor(0, 10);
+      display.println("TEMP:");
+      display.setCursor(60, 10);
+      display.println(temp); //display de temperatura
+
+      display.setCursor(0, 50);
+      display.println("UMB:");
+      display.setCursor(60, 50);
+      display.println(umbral); //display de umbral
+
+      display.display(); //Muestra el display
+
+      if (temp > umbral)
+      {
+        digitalWrite(LED, HIGH);
+      }
+      if (temp < umbral)
+      {
+        digitalWrite(LED, LOW);
+      }
+
+      //CAMBIO DE ESTADO
+      if (val1 == 0 && val2 == 1)
+      {
+        ESTADO = SW1;
+        segs5 = segs + 5;
+      }
+  
+      if (segs >= segs5)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+
+      case SW1:
+      Serial.println("sw1");
+      if (val1 == 1 && val2 == 1)
+      {
+        ESTADO = ON1;
+        segs5 = segs + 5;
+      }
+      
+      if (segs >= segs5)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+      
+      case ON1:
+      Serial.println("on1");
+      if (val1 == 1 && val2 == 0)
+      {
+        ESTADO = SW2;
+        segs5 = segs + 5;
+      }
+      
+      if (segs >= segs5)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+
+      case SW2:
+      Serial.println("sw2");
+      if (val1 == 1 && val2 == 1)
+      {
+        ESTADO = ON2;
+        segs5 = segs + 5;
+      }
+      
+      if (segs >= segs5)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+
+      case ON2:
+      Serial.println("on2");
+      if (val1 == 0 && val2 == 1)
+      {
+        ESTADO = SW12;
+        segs5 = segs + 5;
+      }
+      
+      if (segs >= segs5)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+      
+      case SW12:
+      Serial.println("sw12");
+      if (val1 == 1 && val2 == 1)
+      {
+        ESTADO = PANTALLA2;
+      }
+      
+      if (segs >= segs5)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+      
+      case PANTALLA2:
+      Serial.println("pantalla 2");
+      display.clearDisplay(); //Se reinicia el display
+      display.setTextSize(2); //Establece el tamaño de texto
+      display.setTextColor(WHITE);
+      
+      display.setCursor(0, 10);
+      display.println("SETEAR UMB"); //display de temperatura
+      display.setCursor(0, 40);
+      display.println(umbral); //display de umbral
+
+      display.display(); //Muestra el display
+
+      if (val1 == 0)
+      {
+        ESTADO = SUMA;
+      }
+
+      if (val2 == 0)
+      {
+        ESTADO = RESTA;
+      }
+
+      break;
+      
+      case SUMA:
+      Serial.println("suma");
+      if (val1 == 1)
+      {
+        ESTADO = PANTALLA2;
+        umbral = umbral + 1;
+      }
+
+      if (val2 == 0)
+      {
+        ESTADO = CONFIRMACION;
+      }
+
+      break;
+
+      case RESTA:
+      Serial.println("resta");
+      if (val2 == 1)
+      {
+        ESTADO = PANTALLA2;
+        umbral = umbral - 1;
+      }
+
+      if (val1 == 0)
+      {
+        ESTADO = CONFIRMACION;
+      }
+
+      break;
+
+      case CONFIRMACION:
+      Serial.println("confirmacion");
+      if (val1 == 1 && val2 == 1)
+      {
+        ESTADO = PANTALLA1;
+      }
+
+      break;
+    }
+
+  }
+}
+
+
+void loop() 
+{
+
+}
