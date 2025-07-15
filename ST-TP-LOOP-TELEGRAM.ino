@@ -39,9 +39,9 @@ int segs5;
 #define LED 25 //LED: Se prende al superar el umbral
 
 //BOTONES
-#define SW1 34
+#define SW1 35
 int val1;
-#define SW2 35 
+#define SW2 34 
 int val2;
 
 //PANTALLA
@@ -133,7 +133,6 @@ void Task1code( void * pvParameters ) //PRIMER LOOP || LOOP DE TELEGRAM
   {
     //Se actualiza el reloj
     timer = millis();
-
     //Si temp supera al umbral, y el bot aún no lo anunció (checkeo == 0)
     if (temp > umbral && checkeo == 0) 
     { 
